@@ -1,6 +1,8 @@
 {
   "filter": [
     "ACK",
+    "ADT_A01",
+    "ADT_A02",
     "ORM_O01"
   ]
 }
