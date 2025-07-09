@@ -449,12 +449,17 @@ std::string RemoteEntityFormatRegistryImpl::parseMetainfo(IMessage& message, con
         data = std::string(&pathWithoutFirstSlash[ixEndHeader], pathWithoutFirstSlash.size() - ixEndHeader);
 
         static const std::string WILDCARD = "*";
+        size_t maxMatchLength = 0;
         const std::string* foundEntityName = nullptr;
-        for (auto it = name2Entity.begin(); it != name2Entity.end() && !foundEntityName; ++it)
+        for (auto it = name2Entity.begin(); it != name2Entity.end(); ++it)
         {
             const std::string& prefix = it->first;
-            if (prefix != WILDCARD && pathWithoutFirstSlash.size() >= prefix.size() && pathWithoutFirstSlash.compare(0, prefix.size(), prefix) == 0 && (pathWithoutFirstSlash.size() == prefix.size() || pathWithoutFirstSlash[prefix.size()] == '/'))
+            if (prefix != WILDCARD && pathWithoutFirstSlash.size() >= prefix.size() && 
+                pathWithoutFirstSlash.compare(0, prefix.size(), prefix) == 0 && 
+                (pathWithoutFirstSlash.size() == prefix.size() || pathWithoutFirstSlash[prefix.size()] == '/') &&
+                prefix.size() > maxMatchLength)
             {
+                maxMatchLength = prefix.size();
                 foundEntityName = &prefix;
                 remoteEntity = it->second;
             }
@@ -520,7 +525,7 @@ std::shared_ptr<StructBase> RemoteEntityFormatRegistryImpl::parseHeaderInMetainf
 
     std::shared_ptr<StructBase> structBase;
 
-    if (header.type != RawBytes::structInfo().getTypeName())
+    if ((header.type != RawBytes::structInfo().getTypeName()) || (bufferRef.second == 0 && !data.empty()))
     {
         // special feature for the browser: json data can be written into the path
         if (bufferRef.second == 0 && !data.empty())

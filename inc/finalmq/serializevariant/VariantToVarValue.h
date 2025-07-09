@@ -40,11 +40,11 @@ public:
 
 private:
     // IVariantVisitor
-    virtual void enterLeaf(Variant& variant, int type, ssize_t index, int level, ssize_t size, const std::string& name) override;
-    virtual void enterStruct(Variant& variant, int type, ssize_t index, int level, ssize_t size, const std::string& name) override;
-    virtual void exitStruct(Variant& variant, int type, ssize_t index, int level, ssize_t size, const std::string& name) override;
-    virtual void enterList(Variant& variant, int type, ssize_t index, int level, ssize_t size, const std::string& name) override;
-    virtual void exitList(Variant& variant, int type, ssize_t index, int level, ssize_t size, const std::string& name) override;
+    virtual void enterLeaf(Variant& variant, int type, ssize_t index, int level, ssize_t size, const std::string& name, bool parentIsStruct) override;
+    virtual void enterStruct(Variant& variant, int type, ssize_t index, int level, ssize_t size, const std::string& name, bool parentIsStruct) override;
+    virtual void exitStruct(Variant& variant, int type, ssize_t index, int level, ssize_t size, const std::string& name, bool parentIsStruct) override;
+    virtual void enterList(Variant& variant, int type, ssize_t index, int level, ssize_t size, const std::string& name, bool parentIsStruct) override;
+    virtual void exitList(Variant& variant, int type, ssize_t index, int level, ssize_t size, const std::string& name, bool parentIsStruct) override;
 
 
     Variant&                        m_variant;

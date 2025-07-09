@@ -39,7 +39,6 @@ JsonBuilder::JsonBuilder(IZeroCopyBuffer& buffer, int maxBlockSize)
     : m_zeroCopybuffer(buffer)
     , m_maxBlockSize(maxBlockSize)
 {
-
 }
 
 JsonBuilder::~JsonBuilder()
@@ -87,6 +86,14 @@ void JsonBuilder::resizeBuffer()
     }
 }
 
+
+void JsonBuilder::putJson(const char* json, ssize_t size)
+{
+    reserveSpace(size);
+    assert(m_buffer);
+    memcpy(m_buffer, json, size);
+    m_buffer += size;
+}
 
 
 // IJsonParserVisitor

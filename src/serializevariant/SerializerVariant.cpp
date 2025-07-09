@@ -30,6 +30,7 @@
 #include "finalmq/variant/VariantValueList.h"
 #include "finalmq/variant/VariantValues.h"
 #include "finalmq/metadataserialize/variant.fmq.h"
+#include "finalmq/jsonvariant/JsonToVariant.h"
 
 #include <assert.h>
 #include <algorithm>
@@ -92,7 +93,7 @@ void SerializerVariant::Internal::enterStruct(const MetaField& field)
         m_varValueToVariant = std::make_shared<VarValueToVariant>(*variant);
         m_outer.ParserConverter::setVisitor(m_varValueToVariant->getVisitor());
         m_outer.m_parserProcessDefaultValues->setVisitor(m_varValueToVariant->getVisitor());
-        m_varValueToVariant->setExitNotification([this, &field]() {
+        m_varValueToVariant->setExitNotification([this]() {
             assert(m_varValueToVariant);
             m_outer.ParserConverter::setVisitor(*m_outer.m_parserProcessDefaultValues);
             m_outer.m_parserProcessDefaultValues->resetVarValueActive();
@@ -347,6 +348,31 @@ void SerializerVariant::Internal::enterEnum(const MetaField& field, const char* 
     }
 }
 
+
+void SerializerVariant::Internal::enterJsonString(const MetaField& field, std::string&& value)
+{
+    enterJsonString(field, value.c_str(), value.size());
+}
+void SerializerVariant::Internal::enterJsonString(const MetaField& field, const char* value, ssize_t size)
+{
+    Variant variant;
+    if (field.typeId == MetaTypeId::TYPE_JSON)
+    {
+        JsonToVariant jsonToVariant(variant);
+        jsonToVariant.parse(value, size);
+    }
+    add(field, std::move(variant));
+}
+void SerializerVariant::Internal::enterJsonVariant(const MetaField& field, const Variant& value)
+{
+    add(field, value);
+}
+void SerializerVariant::Internal::enterJsonVariantMove(const MetaField& field, Variant&& value)
+{
+    add(field, std::move(value));
+}
+
+
 void SerializerVariant::Internal::enterArrayBoolMove(const MetaField& field, std::vector<bool>&& value)
 {
     add(field, std::move(value));
@@ -475,7 +501,7 @@ void SerializerVariant::Internal::enterArrayEnum(const MetaField& field, std::ve
     {
         std::vector<std::string> enums;
         enums.reserve(value.size());
-        std::for_each(value.begin(), value.end(), [this, &field, &enums] (std::int32_t entry) {
+        std::for_each(value.begin(), value.end(), [&field, &enums] (std::int32_t entry) {
             const std::string& name = MetaDataGlobal::instance().getEnumAliasByValue(field, entry);
             enums.push_back(name);
         });
@@ -495,7 +521,7 @@ void SerializerVariant::Internal::enterArrayEnum(const MetaField& field, const s
     {
         std::vector<std::string> enums;
         enums.reserve(size);
-        std::for_each(value, value + size, [this, &field, &enums] (std::int32_t entry) {
+        std::for_each(value, value + size, [&field, &enums] (std::int32_t entry) {
             const std::string& name = MetaDataGlobal::instance().getEnumAliasByValue(field, entry);
             enums.push_back(name);
         });
@@ -517,7 +543,7 @@ void SerializerVariant::Internal::enterArrayEnumMove(const MetaField& field, std
     {
         std::vector<std::int32_t> enums;
         enums.reserve(value.size());
-        std::for_each(value.begin(), value.end(), [this, &field, &enums] (const std::string& entry) {
+        std::for_each(value.begin(), value.end(), [&field, &enums] (const std::string& entry) {
             std::int32_t v = MetaDataGlobal::instance().getEnumValueByName(field, entry);
             enums.push_back(v);
         });
@@ -537,7 +563,7 @@ void SerializerVariant::Internal::enterArrayEnum(const MetaField& field, const s
     {
         std::vector<std::int32_t> enums;
         enums.reserve(value.size());
-        std::for_each(value.begin(), value.end(), [this, &field, &enums] (const std::string& entry) {
+        std::for_each(value.begin(), value.end(), [&field, &enums] (const std::string& entry) {
             std::int32_t v = MetaDataGlobal::instance().getEnumValueByName(field, entry);
             enums.push_back(v);
         });

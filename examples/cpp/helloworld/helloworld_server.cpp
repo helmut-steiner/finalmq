@@ -28,36 +28,23 @@
 #include "finalmq/variant/VariantValueStruct.h"
 #include "finalmq/variant/VariantValues.h"
 #include "finalmq/protocols/ProtocolMqtt5Client.h"
+#include "finalmq/interfaces/fmqprocess.fmq.h"
+#include "finalmq/interfaces/fmqlog.fmq.h"
 
 // the definition of the messages are in the file helloworld.fmq
 #include "helloworld.fmq.h"
 
 #include <iostream>
+#include <iomanip>
+#include <sstream>
 
 // the modulename is needed for the logger streams (streamDebug, streamInfo, streamWarning, streamError, streamCritical, streamFatal)
 #define MODULENAME  "helloworld_server"
 
 
-using finalmq::RemoteEntity;
-using finalmq::RemoteEntityContainer;
-using finalmq::IRemoteEntityContainer;
-using finalmq::EntityFileServer;
-using finalmq::PeerId;
-using finalmq::EntityId;
-using finalmq::PeerEvent;
-using finalmq::RequestContextPtr;
-using finalmq::SessionInfo;
-using finalmq::ConnectionData;
-using finalmq::ConnectionEvent;
-using finalmq::Logger;
-using finalmq::LogContext;
-using finalmq::IExecutorPtr;
-using finalmq::Executor;
-using finalmq::ExecutorWorker;
-using finalmq::VariantStruct;
-using finalmq::ProtocolMqtt5Client;
-using helloworld::HelloRequest;
-using helloworld::HelloReply;
+using namespace finalmq;
+using namespace finalmq::fmqprocess;
+using namespace helloworld;
 
 
 
@@ -67,9 +54,9 @@ public:
     EntityServer()
     {
         // register peer events to see when a remote entity connects or disconnects.
-        registerPeerEvent([] (PeerId peerId, const SessionInfo& session, EntityId entityId, PeerEvent peerEvent, bool incoming) {
+        registerPeerEvent([](PeerId peerId, const SessionInfo& session, EntityId entityId, PeerEvent peerEvent, bool incoming) {
             streamInfo << "peer event " << peerEvent.toString();
-        });
+            });
 
         // handle the HelloRequest
         // this is fun - try to access the server with the json interface at port 8888:
@@ -80,7 +67,7 @@ public:
         // or use a HTTP client and do an HTTP request (the method GET, POST, ... does not matter) to localhost:8080 with:
         //   /MyService/helloworld.HelloRequest
         //   and payload: {"persons":[{"name":"Bonnie"},{"name":"Clyde"}]}
-        registerCommand<HelloRequest>([] (const RequestContextPtr& requestContext, const std::shared_ptr<HelloRequest>& request) {
+        registerCommand<HelloRequest>([](const RequestContextPtr& requestContext, const std::shared_ptr<HelloRequest>& request) {
             assert(request);
 
             // prepare the reply
@@ -92,9 +79,9 @@ public:
                 reply.greetings.emplace_back(prefix + request->persons[i].name);
             }
 
-//            PeerId peerid = requestContext->peerId();
+            //            PeerId peerid = requestContext->peerId();
 
-            // send reply
+                        // send reply
             requestContext->reply(std::move(reply));
 
             // note:
@@ -107,9 +94,9 @@ public:
             // So, also a server entity can act as a client and can send requestReply()
             // to the peer entity that is calling this request.
             // An entity can act as a client and as a server. It is bidirectional (symmetric), like a socket.
-        });
+            });
 
-        
+
         // just to demonstrate REST API. You can access the service with either an HTTP PUT with path: "mypath/1234".
         // Or with "maypath/1234/PUT" and the HTTP method (like: GET, POST, PUT, ...) does not matter.
         // try to access the server with the json interface at port 8888:
@@ -139,9 +126,23 @@ public:
 
             // send reply
             requestContext->reply(std::move(reply));
+            });
+
+        registerCommand<NoData>("pollentity", [](const RequestContextPtr& requestContext, const std::shared_ptr<NoData>& request) {
+            requestContext->reply(PollEntityReply("", RecoverMode::RECOVERMODE_NONE));
         });
     }
 };
+
+
+static std::string currentISO8601TimeUTC()
+{
+    auto now = std::chrono::system_clock::now();
+    auto itt = std::chrono::system_clock::to_time_t(now);
+    std::ostringstream ss;
+    ss << std::put_time(gmtime(&itt), "%FT%TZ");
+    return ss.str();
+}
 
 
 //#define MULTITHREADED
@@ -180,6 +181,14 @@ int main()
     // note: multiple entities can be registered at a EntityContainer. Also an entity can be registered to multiple EntityContainers.
     EntityServer entityServer;
     entityContainer.registerEntity(&entityServer, "MyService");
+
+    SessionInfo sessionLog = entityContainer.connect("tcp://localhost:9200:headersize:protobuf");
+    PeerId peerIdLog = entityServer.connect(sessionLog, "LoggingServer", [](PeerId peerId, Status status) {
+        streamInfo << "Logging Server connect reply: " << status.toString();
+    });
+    Logger::instance().registerConsumer([&entityServer, peerIdLog](const LogContext& context, const char* text) {
+        entityServer.sendEvent(peerIdLog, "log", LogEntry(currentISO8601TimeUTC(), "HelloWorldServer", context, text));
+    });
 
     // register an entity for file download. The name "*" means that if an entity name, given by a client, is not found by name, 
     // then this entity will try to open a file inside the htdocs directory. An entity name can contain slashes ('/')

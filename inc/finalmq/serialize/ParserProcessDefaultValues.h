@@ -72,6 +72,10 @@ private:
     virtual void enterEnum(const MetaField& field, std::int32_t value) override;
     virtual void enterEnum(const MetaField& field, std::string&& value) override;
     virtual void enterEnum(const MetaField& field, const char* value, ssize_t size) override;
+    virtual void enterJsonString(const MetaField& field, std::string&& value) override;
+    virtual void enterJsonString(const MetaField& field, const char* value, ssize_t size) override;
+    virtual void enterJsonVariant(const MetaField& field, const Variant& value) override;
+    virtual void enterJsonVariantMove(const MetaField& field, Variant&& value) override;
 
     virtual void enterArrayBoolMove(const MetaField& field, std::vector<bool>&& value) override;
     virtual void enterArrayBool(const MetaField& field, const std::vector<bool>& value) override;
@@ -157,7 +161,7 @@ private:
     IParserVisitor* m_visitor{nullptr};
     const bool m_skipDefaultValues{true};
     const MetaStruct* m_struct{nullptr};
-    std::deque<std::vector<bool>> m_stackFieldsDone{};
+    std::deque<std::pair<std::string, std::vector<bool>>> m_stackFieldsDone{};
     int m_varValueActive{0};
     int m_blockVisitor{0};
     std::deque<EntrySkipDefault> m_stackSkipDefault{};

@@ -21,6 +21,7 @@
 //SOFTWARE.
 
 #include "finalmq/serialize/ParserProcessDefaultValues.h"
+#include "finalmq/variant/Variant.h"
 
 #include <algorithm>
 #include <iostream>
@@ -46,7 +47,11 @@ void ParserProcessDefaultValues::setVisitor(IParserVisitor& visitor)
 
 void ParserProcessDefaultValues::resetVarValueActive()
 {
-    m_varValueActive = 0;
+    if (m_varValueActive > 0)
+    {
+        m_stackFieldsDone.pop_back();
+        m_varValueActive = 0;
+    }
 }
 
 // ParserProcessDefaultValues
@@ -61,7 +66,7 @@ void ParserProcessDefaultValues::startStruct(const MetaStruct& stru)
     m_struct = &stru;
     if (!m_skipDefaultValues)
     {
-        m_stackFieldsDone.emplace_back(stru.getFieldsSize(), false);
+        m_stackFieldsDone.emplace_back(stru.getTypeName(), std::vector<bool>(stru.getFieldsSize(), false));
     }
     else
     {
@@ -76,8 +81,9 @@ void ParserProcessDefaultValues::finished()
     if (!m_skipDefaultValues && m_struct)
     {
         assert(!m_stackFieldsDone.empty());
-        const std::vector<bool>& fieldsDone = m_stackFieldsDone.back();
-        processDefaultValues(*m_struct, fieldsDone);
+        const std::pair<std::string, std::vector<bool>>& fieldsDone = m_stackFieldsDone.back();
+        assert(m_struct->getTypeName() == fieldsDone.first);
+        processDefaultValues(*m_struct, fieldsDone.second);
         m_stackFieldsDone.pop_back();
     }
 
@@ -144,11 +150,11 @@ void ParserProcessDefaultValues::enterStruct(const MetaField& field)
             const MetaStruct* stru = MetaDataGlobal::instance().getStruct(field);
             if (stru)
             {
-                m_stackFieldsDone.emplace_back(stru->getFieldsSize(), false);
+                m_stackFieldsDone.emplace_back(stru->getTypeName(), std::vector<bool>(stru->getFieldsSize(), false));
             }
             else
             {
-                m_stackFieldsDone.emplace_back(0, false);
+                m_stackFieldsDone.emplace_back(std::string(), std::vector<bool>(0, false));
             }
             if (field.typeName == STR_VARVALUE)
             {
@@ -192,11 +198,12 @@ void ParserProcessDefaultValues::exitStruct(const MetaField& field)
     if (!m_skipDefaultValues)
     {
         assert(!m_stackFieldsDone.empty());
-        const std::vector<bool>& fieldsDone = m_stackFieldsDone.back();
+        const std::pair<std::string, std::vector<bool>>& fieldsDone = m_stackFieldsDone.back();
         const MetaStruct* stru = MetaDataGlobal::instance().getStruct(field);
         if (stru)
         {
-            processDefaultValues(*stru, fieldsDone);
+            assert(stru->getTypeName() == fieldsDone.first);
+            processDefaultValues(*stru, fieldsDone.second);
         }
 
         m_stackFieldsDone.pop_back();
@@ -382,11 +389,11 @@ void ParserProcessDefaultValues::markAsDone(const MetaField& field)
     if (!m_skipDefaultValues)
     {
         assert(!m_stackFieldsDone.empty());
-        std::vector<bool>& fieldsDone = m_stackFieldsDone.back();
+        std::pair<std::string, std::vector<bool>>& fieldsDone = m_stackFieldsDone.back();
         ssize_t index = field.index;
-        if (index >= 0 && index < static_cast<ssize_t>(fieldsDone.size()))
+        if (index >= 0 && index < static_cast<ssize_t>(fieldsDone.second.size()))
         {
-            fieldsDone[index] = true;
+            fieldsDone.second[index] = true;
         }
     }
 }
@@ -753,6 +760,71 @@ void ParserProcessDefaultValues::enterEnum(const MetaField& field, std::string&&
 void ParserProcessDefaultValues::enterEnum(const MetaField& field, const char* value, ssize_t size)
 {
     enterEnum(field, std::string(value, size));
+}
+
+void ParserProcessDefaultValues::enterJsonString(const MetaField& field, std::string&& value)
+{
+    if (m_blockVisitor)
+    {
+        return;
+    }
+    markAsDone(field);
+    if (!value.empty() || !m_skipDefaultValues)
+    {
+        if (m_skipDefaultValues)
+        {
+            executeEnterStruct();
+        }
+        m_visitor->enterJsonString(field, std::move(value));
+    }
+}
+void ParserProcessDefaultValues::enterJsonString(const MetaField& field, const char* value, ssize_t size)
+{
+    if (m_blockVisitor)
+    {
+        return;
+    }
+    markAsDone(field);
+    if (size > 0 || !m_skipDefaultValues)
+    {
+        if (m_skipDefaultValues)
+        {
+            executeEnterStruct();
+        }
+        m_visitor->enterJsonString(field, value, size);
+    }
+}
+void ParserProcessDefaultValues::enterJsonVariant(const MetaField& field, const Variant& value)
+{
+    if (m_blockVisitor)
+    {
+        return;
+    }
+    markAsDone(field);
+    if ((value.getType() != VARTYPE_NONE) || !m_skipDefaultValues)
+    {
+        if (m_skipDefaultValues)
+        {
+            executeEnterStruct();
+        }
+        m_visitor->enterJsonVariant(field, value);
+    }
+}
+void ParserProcessDefaultValues::enterJsonVariantMove(const MetaField& field, Variant&& value)
+{
+    if (m_blockVisitor)
+    {
+        return;
+    }
+    markAsDone(field);
+    if ((value.getType() != VARTYPE_NONE) || !m_skipDefaultValues)
+    {
+        if (m_skipDefaultValues)
+        {
+            executeEnterStruct();
+        }
+        m_visitor->enterJsonVariantMove(field, std::move(value));
+    }
 }
 
 void ParserProcessDefaultValues::enterArrayBoolMove(const MetaField& field, std::vector<bool>&& value)
